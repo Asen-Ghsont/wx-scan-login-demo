@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二维码展示与状态检查</title>
+    <script>
+        function fetchQRCode() {
+            const targetURL = 'http://localhost:8080/generateQRCodeTicket';
+
+            fetch(targetURL)
+                .then(response => {
+                    console.log('响应对象:', response);
+                    if (!response.ok) {
+                        throw new Error('请求失败，状态码: ' + response.status);
+                    }
+                    return response.json(); // 尝试解析JSON
+                })
+                .then(result => {
+                    console.log('解析后的结果:', result);
+                    if (!result) {
+                        throw new Error('未能获取到有效的结果对象');
+                    }
+                    if (result.code !== 200) {
+                        throw new Error('请求失败，错误信息: ' + result.msg);
+                    }
+                    const ticket = result.data;
+                    if (ticket) {
+                        // 显示二维码图片
+                        displayQRCode(ticket);
+                        // 开始检查QR码结果
+                        checkQRCodeState(ticket);
+                    } else {
+                        throw new Error('返回数据中没有找到 ticket 字段');
+                    }
+                })
+                .catch(error => {
+                    console.error('发生错误:', error);
+                    document.getElementById('message').textContent = '发生错误: ' + error.message;
+                });
+        }
+
+        function displayQRCode(ticket) {
+            const qrCodeURL = `https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=${encodeURIComponent(ticket)}`;
+            const imgElement = document.createElement('img');
+            imgElement.src = qrCodeURL;
+            imgElement.alt = '二维码';
+            imgElement.width = 430;
+            imgElement.height = 430;
+            document.getElementById('qrcode-container').appendChild(imgElement);
+        }
+
+        function checkQRCodeState(ticket) {
+            const checkURL = `http://localhost:8080/checkQRCodeState?ticket=${encodeURIComponent(ticket)}`;
+            const interval = 3000; // 每3秒检查一次
+
+            const intervalId = setInterval(() => {
+                fetch(checkURL)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('检查请求失败，状态码: ' + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        console.log('检查结果:', result);
+                        if (result.code !== 200) {
+                            throw new Error('检查失败，错误信息: ' + result.msg);
+                        }
+                        if (result.data === 'SCANNED') {
+                            clearInterval(intervalId); // 停止轮询
+                            showLoginSuccess(); // 显示登录成功页面
+                        }
+                    })
+                    .catch(error => {
+                        console.error('检查过程中发生错误:', error);
+                        clearInterval(intervalId); // 停止轮询
+                        document.getElementById('message').textContent = '发生错误: ' + error.message;
+                    });
+            }, interval);
+        }
+
+        function showLoginSuccess() {
+            document.body.innerHTML = `
+                <h1>登录成功</h1>
+                <p>欢迎使用，我们已经成功验证您的身份。</p>
+            `;
+        }
+    </script>
+</head>
+<body>
+<h1>点击按钮获取二维码</h1>
+<button onclick="fetchQRCode()">获取并展示二维码</button>
+<div id="qrcode-container"></div> <!-- 二维码显示区域 -->
+<p id="message"></p> <!-- 显示错误信息的区域 -->
+</body>
+</html>
